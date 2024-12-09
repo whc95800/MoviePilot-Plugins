@@ -794,9 +794,12 @@ class TorrentRemover(_PluginBase):
         if self._mponly:
             tags.append(settings.TORRENT_TAG)
         # 查询种子
-        torrents, error_flag = downloader_obj.get_torrents(tags=tags or None)
-        if error_flag:
-            return []
+        torrents = []
+        for tag in tags:
+            current_torrents, error_flag = downloader_obj.get_torrents(tags=[tag] or None)
+            if error_flag:
+                return []
+            torrents.extend(current_torrents)
         # 处理种子
         for torrent in torrents:
             if downloader_config.type == "qbittorrent":
