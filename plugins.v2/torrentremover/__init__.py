@@ -342,7 +342,7 @@ class TorrentRemover(_PluginBase):
                                         'props': {
                                             'model': 'labels',
                                             'label': '标签',
-                                            'placeholder': '用,分隔多个标签'
+                                            'placeholder': '用,分隔多个标签组。例如 tag1&tag2,tag3|tag4'
                                         }
                                     }
                                 ]
@@ -787,19 +787,39 @@ class TorrentRemover(_PluginBase):
         downloader_obj = self.__get_downloader(downloader)
         downloader_config = self.__get_downloader_config(downloader)
         # 标题
+        and_tags = []
+        or_tags = []
         if self._labels:
-            tags = self._labels.split(',')
-        else:
-            tags = []
+            for tag_group in self._labels.split(','):
+                if '&' in tag_group:
+                    # 如果包含 `&`，按 `&` 分割并归类到 and_tags
+                    and_tags.extend(tag_group.split('&'))
+                elif '|' in tag_group:
+                    # 如果包含 `|`，按 `|` 分割并归类到 or_tags
+                    or_tags.extend(tag_group.split('|'))
+                else:
+                    # 没有逻辑符的单独标签默认归类到 or_tags
+                    or_tags.append(tag_group)
         if self._mponly:
-            tags.append(settings.TORRENT_TAG)
+            # 如果 _mponly 开启，将特殊标签加入 and_tags
+            and_tags.append(settings.TORRENT_TAG)
         # 查询种子
         torrents = []
-        for tag in tags:
-            current_torrents, error_flag = downloader_obj.get_torrents(tags=[tag] or None)
+        # 使用 AND 逻辑的查询
+        if and_tags:
+            and_torrents, error_flag = downloader_obj.get_torrents(tags=and_tags or None)
             if error_flag:
                 return []
-            torrents.extend(current_torrents)
+            torrents.extend(and_torrents)
+        # 使用 OR 逻辑的查询
+        if or_tags:
+            for tag in or_tags:
+                or_torrents, error_flag = downloader_obj.get_torrents(tags=[tag] or None)
+                if error_flag:
+                    return []
+                torrents.extend(or_torrents)
+        # 去重处理
+        torrents = list({torrent.hash: torrent for torrent in torrents}.values())
         # 处理种子
         for torrent in torrents:
             if downloader_config.type == "qbittorrent":
