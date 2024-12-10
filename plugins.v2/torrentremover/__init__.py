@@ -26,9 +26,9 @@ class TorrentRemover(_PluginBase):
     # 插件图标
     plugin_icon = "delete.jpg"
     # 插件版本
-    plugin_version = "2.1.3"
+    plugin_version = "2.2.0"
     # 插件作者
-    plugin_author = "jxxghp"
+    plugin_author = "jxxghp$whc"
     # 作者主页
     author_url = "https://github.com/jxxghp"
     # 插件配置项ID前缀
