@@ -26,7 +26,7 @@ class QBTorrentRemover(_PluginBase):
     # 插件图标
     plugin_icon = "delete.jpg"
     # 插件版本
-    plugin_version = "1.0.0"
+    plugin_version = "1.0.1"
     # 插件作者
     plugin_author = "whc95800"
     # 作者主页
@@ -345,7 +345,7 @@ class QBTorrentRemover(_PluginBase):
                                         'props': {
                                             'model': 'labels',
                                             'label': '标签',
-                                            'placeholder': '用,分隔多个标签组。例如 tag1&tag2,tag3|tag4'
+                                            'placeholder': '用,分隔多个标签组。例如 tag1|tag2|…,tag3&tag4&…,…'
                                         }
                                     }
                                 ]
@@ -809,66 +809,63 @@ class QBTorrentRemover(_PluginBase):
         # 标题
         and_tags = []
         or_tags = []
+
         # 处理普通标签
         if self._labels:
             for tag_group in self._labels.split(','):
                 if '&' in tag_group:
-                    # 如果包含 `&`，按 `&` 分割并归类到 and_tags，确保每个标签组独立
-                    and_tags.append(tag_group.split('&'))  # 每组标签放在一个列表中
+                    # 包含 `&`，分割后加入 and_tags
+                    and_tags.append(tag_group.split('&'))
                 elif '|' in tag_group:
-                    # 如果包含 `|`，按 `|` 分割并归类到 or_tags
-                    or_tags.append(tag_group.split('|'))  # 每组标签放在一个列表中
-                else:
-                    pass
-        else:
-            or_tags.append([])
-        # 处理特殊标签的添加
-        def add_special_tags(and_tags, mponly, finished):
-            # 如果 and_tags 不为空，才根据条件添加特殊标签
-            if and_tags:
-                for tag_group in and_tags:
+                    # 包含 `|`，分割后加入 or_tags
+                    or_tags.extend(tag_group.split('|'))
+
+        # 添加特殊标签
+        def add_special_tags(tag_groups, mponly, finished):
+            if tag_groups:  # 仅当标签组存在时操作
+                for tag_group in tag_groups:
                     if mponly:
-                        # 如果 _mponly 开启，将特殊标签加入当前 tag_group
-                        tag_group.append(settings.TORRENT_TAG)  # 作为独立的一组条件
+                        tag_group.append(settings.TORRENT_TAG)
                     if finished:
-                        # 如果 _finished 开启，将特殊标签加入当前 tag_group
-                        tag_group.append("已整理")  # 作为独立的一组条件
+                        tag_group.append("已整理")
+
         add_special_tags(and_tags, self._mponly, self._finished)
-        # 开始查询种子
+
+        # 查询种子
         torrents = []
-        # 使用 AND 逻辑的查询
+
+        # AND 逻辑查询
         if and_tags:
             for tag_group in and_tags:
-                if not tag_group:  # 如果tag_group为空，跳过
+                if not tag_group:  # 跳过空标签组
                     continue
                 and_torrents, error_flag = downloader_obj.get_torrents(tags=tag_group)
                 if error_flag:
-                    return []
+                    return []  # 查询出错时返回空列表
                 torrents.extend(and_torrents)
-        # 使用 OR 逻辑的查询
+
+        # OR 逻辑查询
         if or_tags:
-            or_torrents_all = []
-            for tag_group in or_tags:
-                for tag in tag_group:
-                    or_torrents, error_flag = downloader_obj.get_torrents(tags=[tag])
-                    if error_flag:
-                        return []
-                    or_torrents_all.extend(or_torrents)
-            or_torrents_all = list({torrent.hash: torrent for torrent in or_torrents_all}.values())
-            and_torrent_hashes = {torrent.hash for torrent in torrents}
-            or_torrents_all = [torrent for torrent in or_torrents_all if torrent.hash not in and_torrent_hashes]
-            filtered_torrents = or_torrents_all
-            if self._finished and self._mponly:
-                logger.info(f"仅MOVIEPILOT任务&仅已完成开启")
-                filtered_torrents = [torrent for torrent in or_torrents_all if "已整理" in getattr(torrent, 'tags', []) and settings.TORRENT_TAG in getattr(torrent, 'tags', [])]
-            elif self._finished:
-                logger.info(f"仅已完成开启")
-                filtered_torrents = [torrent for torrent in or_torrents_all if "已整理" in getattr(torrent, 'tags', [])]
-            elif self._mponly:
-                logger.info(f"仅MOVIEPILOT任务开启")
-                filtered_torrents = [torrent for torrent in or_torrents_all if settings.TORRENT_TAG in getattr(torrent, 'tags', [])]
-            logger.info(f"筛选后的种子数量: {len(filtered_torrents)}")
-            torrents.extend(filtered_torrents)
+            for tag in or_tags:
+                or_torrents, error_flag = downloader_obj.get_torrents(tags=[tag])
+                if error_flag:
+                    return []  # 查询出错时返回空列表
+                torrents.extend(or_torrents)
+
+        # 去重处理
+        torrents = list({torrent.hash: torrent for torrent in torrents}.values())
+
+        # 筛选种子（根据 _finished 和 _mponly 条件）
+        if self._finished or self._mponly:
+            logger.info("开始筛选种子...")
+            torrents = [
+                torrent for torrent in torrents
+                if (
+                        (not self._finished or "已整理" in getattr(torrent, 'tags', [])) and
+                        (not self._mponly or settings.TORRENT_TAG in getattr(torrent, 'tags', []))
+                )
+            ]
+        logger.info(f"筛选后的种子数量: {len(torrents)}")
         # 处理种子
         for torrent in torrents:
             if downloader_config.type == "qbittorrent":

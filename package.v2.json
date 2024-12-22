@@ -3,12 +3,13 @@
         "name": "自动删种改良版",
         "description": "自动删除下载器中的下载任务。",
         "labels": "做种",
-        "version": "1.0.0",
+        "version": "1.0.1",
         "icon": "delete.jpg",
         "author": "whc95800",
         "level": 2,
         "history": {
-            "v6.0.0": "修改规则"
+            "v1.0.0": "新规",
+            "v1.0.1": "修改bug"
         }
     }
 }
